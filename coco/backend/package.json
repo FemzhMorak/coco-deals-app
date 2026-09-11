@@ -1,0 +1,27 @@
+{
+  "name": "coco-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Coco deal intelligence backend — Puppeteer crawler, AI source discovery agent, quality scoring, personalisation, community verification, push notifications, and a private admin dashboard.",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "crawl:now": "node crawler/runOnce.js",
+    "agent:now": "node agent/runOnce.js",
+    "seed:reset": "node src/seed/reset.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.68.0",
+    "axios": "^1.7.9",
+    "cheerio": "^1.0.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "expo-server-sdk": "^3.13.0",
+    "express": "^4.21.2",
+    "node-cron": "^3.0.3",
+    "puppeteer": "^25.10.0"
+  }
+}

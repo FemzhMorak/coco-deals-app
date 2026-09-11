@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Coco Admin — Crawl Logs</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/admin/admin.css" />
+</head>
+<body>
+  <div class="layout">
+    <div class="sidebar" id="sidebar"></div>
+    <main>
+      <h1>Crawl Logs</h1>
+      <p class="subtitle">Timeline of crawl activity across every source, plus agent discovery events.</p>
+
+      <h2>Crawl Activity</h2>
+      <div id="crawlLogs"></div>
+
+      <h2>Agent Discovery Log</h2>
+      <div id="agentLogs"></div>
+    </main>
+  </div>
+
+  <script src="/admin/admin.js"></script>
+  <script>
+    renderShell('/admin/logs.html');
+
+    const STATUS_PILL = {
+      success: ['green', 'success'],
+      no_deals: ['blue', 'no deals found'],
+      error: ['red', 'error'],
+    };
+
+    async function load() {
+      const { logs: crawlLogs } = await api('/crawl-logs?limit=100');
+      const crawlEl = document.getElementById('crawlLogs');
+      crawlEl.innerHTML = '';
+      if (crawlLogs.length === 0) crawlEl.appendChild(el('div', { class: 'empty' }, 'No crawl activity yet.'));
+      for (const log of crawlLogs) {
+        const [color, label] = STATUS_PILL[log.status] || ['grey', log.status];
+        crawlEl.appendChild(
+          el('div', { class: 'log-item' }, [
+            el('div', { class: 'row' }, [
+              el('div', {}, [
+                el('span', { class: 'title' }, log.sourceName),
+                ' ',
+                el('span', { class: `pill ${color}` }, label),
+              ]),
+              el('div', { class: 'time' }, fmtDate(log.timestamp)),
+            ]),
+            el(
+              'div',
+              { class: 'detail' },
+              log.errorMessage
+                ? `Error: ${log.errorMessage}`
+                : `${log.dealsFound} deal(s) found (${log.newDeals} new) — ${log.durationMs}ms`
+            ),
+          ])
+        );
+      }
+
+      const { logs: agentLogs } = await api('/agent-logs?limit=50');
+      const agentEl = document.getElementById('agentLogs');
+      agentEl.innerHTML = '';
+      if (agentLogs.length === 0) agentEl.appendChild(el('div', { class: 'empty' }, 'No agent runs yet.'));
+      for (const log of agentLogs) {
+        agentEl.appendChild(
+          el('div', { class: 'log-item' }, [
+            el('div', { class: 'row' }, [
+              el('div', { class: 'title' }, `Discovery run — ${log.newDomainsChecked} domain(s) checked`),
+              el('div', { class: 'time' }, fmtDate(log.timestamp)),
+            ]),
+            el('div', { class: 'detail' }, [
+              el('span', { class: 'pill green' }, `${log.added} added`),
+              ' ',
+              el('span', { class: 'pill yellow' }, `${log.pending} pending review`),
+              ' ',
+              el('span', { class: 'pill grey' }, `${log.rejected} rejected`),
+            ]),
+            el('div', { class: 'faint', style: 'margin-top:6px' }, `Queries: ${log.queries.join(' · ')}`),
+          ])
+        );
+      }
+    }
+
+    load();
+  </script>
+</body>
+</html>

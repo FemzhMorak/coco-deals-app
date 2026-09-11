@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Coco Admin — Agent</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/admin/admin.css" />
+</head>
+<body>
+  <div class="layout">
+    <div class="sidebar" id="sidebar"></div>
+    <main>
+      <h1>Source Discovery Agent</h1>
+      <p class="subtitle">AI-assisted discovery of new Nigerian deal sources.</p>
+
+      <div class="stat-grid" id="stats"></div>
+
+      <div class="actions-row">
+        <button class="primary" id="runBtn">Run Source Discovery Agent Now</button>
+      </div>
+
+      <h2>Pending Review (confidence 50–70)</h2>
+      <table>
+        <thead><tr><th>Name</th><th>Category</th><th>URL</th><th>Confidence</th><th>Discovered</th><th></th></tr></thead>
+        <tbody id="pendingBody"></tbody>
+      </table>
+
+      <h2>Discovered by Agent This Week</h2>
+      <table>
+        <thead><tr><th>Name</th><th>Category</th><th>URL</th><th>Added</th></tr></thead>
+        <tbody id="weekBody"></tbody>
+      </table>
+    </main>
+  </div>
+
+  <script src="/admin/admin.js"></script>
+  <script>
+    renderShell('/admin/agent.html');
+
+    async function load() {
+      const [{ pendingSources }, { sources }, { logs }] = await Promise.all([
+        api('/pending-sources'),
+        api('/sources'),
+        api('/agent-logs?limit=1'),
+      ]);
+
+      const lastRun = logs[0];
+      const statsEl = document.getElementById('stats');
+      const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
+      const thisWeek = sources.filter((s) => s.addedBy === 'agent' && new Date(s.createdAt).getTime() >= weekAgo);
+      statsEl.innerHTML = '';
+      const cards = [
+        ['Last Agent Run', lastRun ? relTime(lastRun.timestamp) : 'never'],
+        ['Discovered This Week', thisWeek.length],
+        ['Pending Review', pendingSources.length],
+      ];
+      for (const [label, value] of cards) {
+        statsEl.appendChild(el('div', { class: 'stat-card' }, [el('div', { class: 'label' }, label), el('div', { class: 'value' }, String(value))]));
+      }
+
+      const pendingBody = document.getElementById('pendingBody');
+      pendingBody.innerHTML = '';
+      if (pendingSources.length === 0) {
+        pendingBody.appendChild(el('tr', {}, el('td', { colspan: '6', class: 'empty' }, 'Nothing pending review.')));
+      }
+      for (const p of pendingSources) {
+        const approveBtn = el('button', {
+          class: 'primary',
+          onclick: async () => {
+            await api(`/pending-sources/${p.id}/approve`, { method: 'POST' });
+            toast(`Approved "${p.name}"`);
+            load();
+          },
+        }, 'Approve');
+        const rejectBtn = el('button', {
+          class: 'danger',
+          onclick: async () => {
+            await api(`/pending-sources/${p.id}/reject`, { method: 'POST' });
+            toast(`Rejected "${p.name}"`);
+            load();
+          },
+        }, 'Reject');
+
+        pendingBody.appendChild(
+          el('tr', {}, [
+            el('td', {}, p.name),
+            el('td', {}, el('span', { class: 'pill blue' }, p.category)),
+            el('td', {}, el('a', { href: p.url, target: '_blank', class: 'mono' }, p.url.replace(/^https?:\/\//, '').slice(0, 32))),
+            el('td', {}, el('span', { class: 'pill yellow' }, `${p.confidence}%`)),
+            el('td', { class: 'faint' }, relTime(p.discoveredAt)),
+            el('td', { style: 'display:flex;gap:6px' }, [approveBtn, rejectBtn]),
+          ])
+        );
+      }
+
+      const weekBody = document.getElementById('weekBody');
+      weekBody.innerHTML = '';
+      if (thisWeek.length === 0) {
+        weekBody.appendChild(el('tr', {}, el('td', { colspan: '4', class: 'empty' }, 'No agent-discovered sources this week.')));
+      }
+      for (const s of thisWeek) {
+        weekBody.appendChild(
+          el('tr', {}, [
+            el('td', {}, s.name),
+            el('td', {}, el('span', { class: 'pill blue' }, s.category)),
+            el('td', {}, el('a', { href: s.url, target: '_blank', class: 'mono' }, s.url.replace(/^https?:\/\//, '').slice(0, 32))),
+            el('td', { class: 'faint' }, relTime(s.createdAt)),
+          ])
+        );
+      }
+    }
+
+    document.getElementById('runBtn').addEventListener('click', async (e) => {
+      e.target.disabled = true;
+      e.target.textContent = 'Running…';
+      try {
+        const { result } = await api('/agent-run-now', { method: 'POST' });
+        toast(`Agent complete — ${result.added} added, ${result.pending} pending review`);
+        await load();
+      } catch (err) {
+        toast(err.message, 'error');
+      } finally {
+        e.target.disabled = false;
+        e.target.textContent = 'Run Source Discovery Agent Now';
+      }
+    });
+
+    load();
+  </script>
+</body>
+</html>

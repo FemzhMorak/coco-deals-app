@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Coco Admin — Login</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/admin/admin.css" />
+  <style>
+    body { min-width: 0; display: flex; align-items: center; justify-content: center; height: 100vh; }
+    .card { width: 320px; background: var(--panel); border: 1px solid var(--panel-border); border-radius: 12px; padding: 28px; }
+    .card h1 { font-size: 18px; margin-bottom: 4px; }
+    .card p { color: var(--text-dim); font-size: 13px; margin-bottom: 20px; }
+    .card input { width: 100%; background: #0f1115; border: 1px solid var(--panel-border); color: var(--text); padding: 10px 12px; border-radius: 8px; font-size: 14px; margin-bottom: 14px; font-family: inherit; }
+    .card button { width: 100%; }
+    .error { color: var(--red); font-size: 12px; margin-bottom: 12px; min-height: 14px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🥥 Coco Admin</h1>
+    <p>Enter the admin password to continue.</p>
+    <div class="error" id="error"></div>
+    <form id="loginForm">
+      <input type="password" id="password" placeholder="Admin password" autofocus />
+      <button type="submit" class="primary">Log in</button>
+    </form>
+  </div>
+  <script>
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errorEl = document.getElementById('error');
+      errorEl.textContent = '';
+      const password = document.getElementById('password').value;
+      try {
+        const res = await fetch('/admin/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Login failed');
+        window.location.href = '/admin/index.html';
+      } catch (err) {
+        errorEl.textContent = err.message;
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Coco Admin — Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/admin/admin.css" />
+</head>
+<body>
+  <div class="layout">
+    <div class="sidebar" id="sidebar"></div>
+    <main>
+      <h1>Dashboard</h1>
+      <p class="subtitle">Coco source-management & crawl intelligence overview.</p>
+
+      <div class="stat-grid" id="stats"></div>
+
+      <div class="actions-row">
+        <button class="primary" id="crawlBtn">Trigger Manual Crawl Now</button>
+        <button id="agentBtn">Run Source Discovery Agent Now</button>
+      </div>
+
+      <h2>System Health — Source Status</h2>
+      <table>
+        <thead><tr><th>Source</th><th>Status</th></tr></thead>
+        <tbody id="healthBody"></tbody>
+      </table>
+    </main>
+  </div>
+
+  <script src="/admin/admin.js"></script>
+  <script>
+    renderShell('/admin/index.html');
+
+    const STATUS_PILL = {
+      success: ['green', 'Working'],
+      no_deals: ['blue', 'OK — no deals found'],
+      error: ['red', 'Failing'],
+      never_crawled: ['grey', 'Never crawled'],
+      inactive: ['grey', 'Inactive'],
+    };
+
+    async function load() {
+      const d = await api('/dashboard');
+
+      const statsEl = document.getElementById('stats');
+      statsEl.innerHTML = '';
+      const cards = [
+        ['Total Sources', d.totalSources, `${d.activeSources} active`],
+        ['Active Deals', d.totalActiveDeals, `${d.dealsFoundToday} found today`],
+        ['Last Crawl', d.lastCrawlAt ? relTime(d.lastCrawlAt) : 'never', d.nextCrawlAt ? `next: ${relTime(d.nextCrawlAt)}` : ''],
+        ['Last Agent Run', d.lastAgentAt ? relTime(d.lastAgentAt) : 'never', d.nextAgentAt ? `next: ${relTime(d.nextAgentAt)}` : ''],
+        ['Pending Review', d.pendingSourcesCount, 'agent-discovered sources'],
+      ];
+      for (const [label, value, meta] of cards) {
+        statsEl.appendChild(
+          el('div', { class: 'stat-card' }, [
+            el('div', { class: 'label' }, label),
+            el('div', { class: 'value' }, String(value)),
+            el('div', { class: 'meta' }, meta || ''),
+          ])
+        );
+      }
+
+      const healthBody = document.getElementById('healthBody');
+      healthBody.innerHTML = '';
+      if (d.sourceHealth.length === 0) {
+        healthBody.appendChild(el('tr', {}, el('td', { colspan: '2', class: 'empty' }, 'No sources yet.')));
+      }
+      for (const s of d.sourceHealth) {
+        const [color, label] = STATUS_PILL[s.status] || ['grey', s.status];
+        healthBody.appendChild(
+          el('tr', {}, [
+            el('td', {}, s.name),
+            el('td', {}, el('span', { class: `pill ${color}` }, label)),
+          ])
+        );
+      }
+    }
+
+    document.getElementById('crawlBtn').addEventListener('click', async (e) => {
+      e.target.disabled = true;
+      e.target.textContent = 'Crawling…';
+      try {
+        const { result } = await api('/crawl-now', { method: 'POST' });
+        toast(`Crawl complete — ${result.sourcesProcessed} sources, ${result.newDeals} new deals`);
+        await load();
+      } catch (err) {
+        toast(err.message, 'error');
+      } finally {
+        e.target.disabled = false;
+        e.target.textContent = 'Trigger Manual Crawl Now';
+      }
+    });
+
+    document.getElementById('agentBtn').addEventListener('click', async (e) => {
+      e.target.disabled = true;
+      e.target.textContent = 'Running agent…';
+      try {
+        const { result } = await api('/agent-run-now', { method: 'POST' });
+        toast(`Agent complete — ${result.newDomainsChecked} domains checked, ${result.added} added, ${result.pending} pending`);
+        await load();
+      } catch (err) {
+        toast(err.message, 'error');
+      } finally {
+        e.target.disabled = false;
+        e.target.textContent = 'Run Source Discovery Agent Now';
+      }
+    });
+
+    load();
+  </script>
+</body>
+</html>

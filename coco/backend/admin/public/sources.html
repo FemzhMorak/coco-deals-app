@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Coco Admin — Sources</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/admin/admin.css" />
+</head>
+<body>
+  <div class="layout">
+    <div class="sidebar" id="sidebar"></div>
+    <main>
+      <h1>Sources</h1>
+      <p class="subtitle">Every site/account the crawler pulls deals from.</p>
+
+      <h2>Add New Source</h2>
+      <form class="form-grid" id="addForm">
+        <label>Name <input name="name" required placeholder="e.g. Fouani Nigeria" /></label>
+        <label>Category
+          <select name="category" id="categorySelect" required></select>
+        </label>
+        <label>Type
+          <select name="type" required>
+            <option value="website">website</option>
+            <option value="instagram">instagram</option>
+            <option value="twitter">twitter</option>
+            <option value="facebook">facebook</option>
+          </select>
+        </label>
+        <label>URL <input name="url" required placeholder="https://..." /></label>
+        <label class="full">Notes <input name="notes" placeholder="optional" /></label>
+        <div class="full"><button type="submit" class="primary">Add Source</button></div>
+      </form>
+
+      <h2>All Sources</h2>
+      <div class="filters">
+        <select id="filterCategory"><option value="">All categories</option></select>
+        <select id="filterAddedBy">
+          <option value="">Manual + Agent</option>
+          <option value="manual">Manual only</option>
+          <option value="agent">Agent only</option>
+        </select>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th><th>Category</th><th>URL</th><th>Active</th>
+            <th>Last Crawled</th><th>Deals Found</th><th>Success Rate</th><th>Added By</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </main>
+  </div>
+
+  <script src="/admin/admin.js"></script>
+  <script>
+    renderShell('/admin/sources.html');
+    let CATEGORIES = [];
+
+    async function load() {
+      const { sources, categories } = await api('/sources');
+      CATEGORIES = categories;
+      populateCategorySelects();
+      render(sources);
+    }
+
+    function populateCategorySelects() {
+      const categorySelect = document.getElementById('categorySelect');
+      const filterCategory = document.getElementById('filterCategory');
+      if (categorySelect.options.length === 0) {
+        for (const c of CATEGORIES) categorySelect.appendChild(el('option', { value: c }, c));
+      }
+      if (filterCategory.options.length === 1) {
+        for (const c of CATEGORIES) filterCategory.appendChild(el('option', { value: c }, c));
+      }
+    }
+
+    function render(sources) {
+      const category = document.getElementById('filterCategory').value;
+      const addedBy = document.getElementById('filterAddedBy').value;
+      let list = sources;
+      if (category) list = list.filter((s) => s.category === category);
+      if (addedBy) list = list.filter((s) => s.addedBy === addedBy);
+
+      const tbody = document.getElementById('tbody');
+      tbody.innerHTML = '';
+      if (list.length === 0) {
+        tbody.appendChild(el('tr', {}, el('td', { colspan: '9', class: 'empty' }, 'No sources match.')));
+        return;
+      }
+
+      for (const s of list) {
+        const toggle = el('button', {
+          class: `toggle ${s.active ? 'on' : ''}`,
+          onclick: async () => {
+            await api(`/sources/${s.id}`, { method: 'PATCH', body: JSON.stringify({ active: !s.active }) });
+            load();
+          },
+        }, el('div', { class: 'knob' }));
+
+        const deleteBtn = el('button', {
+          class: 'danger',
+          onclick: async () => {
+            if (!confirm(`Delete source "${s.name}"?`)) return;
+            await api(`/sources/${s.id}`, { method: 'DELETE' });
+            toast('Source deleted');
+            load();
+          },
+        }, 'Delete');
+
+        tbody.appendChild(
+          el('tr', {}, [
+            el('td', {}, s.name),
+            el('td', {}, el('span', { class: 'pill blue' }, s.category)),
+            el('td', {}, el('a', { href: s.url, target: '_blank', class: 'mono' }, s.url.replace(/^https?:\/\//, '').slice(0, 36))),
+            el('td', {}, toggle),
+            el('td', { class: 'faint' }, s.lastCrawled ? relTime(s.lastCrawled) : 'never'),
+            el('td', {}, String(s.dealsFound)),
+            el('td', {}, `${s.successRate}%`),
+            el('td', {}, el('span', { class: `pill ${s.addedBy === 'agent' ? 'yellow' : 'grey'}` }, s.addedBy)),
+            el('td', {}, deleteBtn),
+          ])
+        );
+      }
+    }
+
+    document.getElementById('filterCategory').addEventListener('change', load);
+    document.getElementById('filterAddedBy').addEventListener('change', load);
+
+    document.getElementById('addForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = new FormData(e.target);
+      const body = Object.fromEntries(form.entries());
+      try {
+        await api('/sources', { method: 'POST', body: JSON.stringify(body) });
+        toast('Source added');
+        e.target.reset();
+        load();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    });
+
+    load();
+  </script>
+</body>
+</html>

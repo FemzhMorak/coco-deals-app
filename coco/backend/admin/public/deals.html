@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Coco Admin — Deals</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/admin/admin.css" />
+</head>
+<body>
+  <div class="layout">
+    <div class="sidebar" id="sidebar"></div>
+    <main>
+      <h1>Deals</h1>
+      <p class="subtitle">Every deal currently in backend/data/deals.json.</p>
+
+      <div class="actions-row">
+        <button class="danger" id="clearExpiredBtn">Clear Expired Deals</button>
+      </div>
+
+      <div class="filters">
+        <select id="filterCategory"><option value="">All categories</option></select>
+        <input id="minScore" type="number" min="0" max="100" placeholder="Min score" style="width:90px" />
+        <input id="maxScore" type="number" min="0" max="100" placeholder="Max score" style="width:90px" />
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim)">
+          <input id="expiringOnly" type="checkbox" style="width:auto" /> Expiring within 6h
+        </label>
+        <button id="applyFilters">Apply</button>
+      </div>
+
+      <table>
+        <thead>
+          <tr><th>Brand</th><th>Title</th><th>Category</th><th>Quality</th><th>Expiry</th><th>Source</th><th></th></tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </main>
+  </div>
+
+  <script src="/admin/admin.js"></script>
+  <script>
+    renderShell('/admin/deals.html');
+    let sourceMap = {};
+
+    function scoreColor(score) {
+      if (score >= 80) return 'green';
+      if (score >= 60) return 'blue';
+      if (score >= 40) return 'yellow';
+      return 'red';
+    }
+
+    async function loadSources() {
+      const { sources } = await api('/sources');
+      sourceMap = Object.fromEntries(sources.map((s) => [s.id, s.name]));
+    }
+
+    function buildQuery() {
+      const params = new URLSearchParams();
+      const category = document.getElementById('filterCategory').value;
+      const minScore = document.getElementById('minScore').value;
+      const maxScore = document.getElementById('maxScore').value;
+      const expiringOnly = document.getElementById('expiringOnly').checked;
+      if (category) params.set('category', category);
+      if (minScore) params.set('minScore', minScore);
+      if (maxScore) params.set('maxScore', maxScore);
+      if (expiringOnly) params.set('expiringOnly', 'true');
+      return params.toString();
+    }
+
+    async function load() {
+      await loadSources();
+      const { deals } = await api(`/deals?${buildQuery()}`);
+
+      const categorySelect = document.getElementById('filterCategory');
+      if (categorySelect.options.length === 1) {
+        const cats = [...new Set(deals.map((d) => d.category))].sort();
+        for (const c of cats) categorySelect.appendChild(el('option', { value: c }, c));
+      }
+
+      const tbody = document.getElementById('tbody');
+      tbody.innerHTML = '';
+      if (deals.length === 0) {
+        tbody.appendChild(el('tr', {}, el('td', { colspan: '7', class: 'empty' }, 'No deals match.')));
+        return;
+      }
+      for (const d of deals) {
+        const expired = new Date(d.expiryDate).getTime() < Date.now();
+        const deleteBtn = el('button', {
+          class: 'danger',
+          onclick: async () => {
+            if (!confirm(`Delete deal "${d.title}"?`)) return;
+            await api(`/deals/${d.id}`, { method: 'DELETE' });
+            toast('Deal deleted');
+            load();
+          },
+        }, 'Delete');
+
+        tbody.appendChild(
+          el('tr', {}, [
+            el('td', {}, d.brand),
+            el('td', {}, d.title.slice(0, 60)),
+            el('td', {}, el('span', { class: 'pill blue' }, d.category)),
+            el('td', {}, el('span', { class: `pill ${scoreColor(d.qualityScore)}` }, String(d.qualityScore))),
+            el('td', { class: expired ? 'muted' : '' }, expired ? 'expired' : relTime(d.expiryDate)),
+            el('td', { class: 'faint' }, d.sourceId ? sourceMap[d.sourceId] || 'unknown source' : 'seed data'),
+            el('td', {}, deleteBtn),
+          ])
+        );
+      }
+    }
+
+    document.getElementById('applyFilters').addEventListener('click', load);
+    document.getElementById('clearExpiredBtn').addEventListener('click', async () => {
+      if (!confirm('Delete all expired deals?')) return;
+      const { removed } = await api('/deals/clear-expired', { method: 'POST' });
+      toast(`Removed ${removed} expired deal(s)`);
+      load();
+    });
+
+    load();
+  </script>
+</body>
+</html>
